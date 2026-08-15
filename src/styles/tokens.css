@@ -1,0 +1,59 @@
+:root {
+  --gray-0: #ffffff;
+  --gray-50: #f7f8f8;
+  --gray-100: #edeff1;
+  --gray-200: #dde1e5;
+  --gray-300: #c2c8ce;
+  --gray-500: #6b747d;
+  --gray-700: #3a424a;
+  --gray-900: #12161a;
+
+  --accent-600: #1f6f5c;
+  --accent-500: #2a8770;
+
+  --signal-ok-ink: #1f6f5c;
+  --signal-warn-ink: #8f5309;
+  --signal-stop-ink: #b42318;
+
+  --signal-ok-tint: #e6f2ee;
+  --signal-warn-tint: #fbf1e3;
+  --signal-stop-tint: #fdeceb;
+
+  --surface: var(--gray-0);
+  --surface-raised: var(--gray-0);
+  --surface-sunken: var(--gray-50);
+  --surface-inset: var(--gray-100);
+
+  --border-subtle: var(--gray-200);
+  --border-strong: var(--gray-300);
+
+  --text-primary: var(--gray-900);
+  --text-secondary: var(--gray-700);
+  --text-muted: var(--gray-500);
+
+  --accent: var(--accent-600);
+  --accent-hover: var(--accent-500);
+  --accent-ink: var(--gray-0);
+  --accent-tint: var(--signal-ok-tint);
+
+  --row-hover: var(--gray-50);
+  --row-active: var(--gray-100);
+
+  --pin-shadow: rgb(12 15 18 / 0.14);
+  --overlay-shadow: rgb(12 15 18 / 0.1);
+  --focus-ring: var(--accent-600);
+
+  --meter-track: var(--gray-200);
+  --meter-fill: var(--accent-500);
+  --meter-full: #b4690e;
+  --meter-overflow: #b42318;
+
+  --row-height: 44px;
+  --cell-pad-y: 10px;
+  --cell-pad-x: 14px;
+
+  --z-cell: 1;
+  --z-pinned: 2;
+  --z-header: 3;
+  --z-header-pinned: 4;
+}
