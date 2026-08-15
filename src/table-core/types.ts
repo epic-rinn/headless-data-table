@@ -155,6 +155,7 @@ export type UseDataTableOptions<TData> = {
 
   getCoreRowModel: RowModelFactory<TData>;
   getSortedRowModel?: RowModelFactory<TData>;
+  getPaginationRowModel?: RowModelFactory<TData>;
 
   manualSorting?: boolean;
   manualPagination?: boolean;
@@ -179,6 +180,23 @@ export type Table<TData> = {
   getCoreRowModel: () => RowModel<TData>;
   getPreSortedRowModel: () => RowModel<TData>;
   getSortedRowModel: () => RowModel<TData>;
+  getPrePaginationRowModel: () => RowModel<TData>;
+  getPaginationRowModel: () => RowModel<TData>;
   getRowModel: () => RowModel<TData>;
   getRow: (id: string) => Row<TData> | undefined;
+
+  getRowCount: () => number;
+  getPageCount: () => number;
+  /** Clamped against the current page count — never out of range. */
+  getPageIndex: () => number;
+  getPageSize: () => number;
+  getDisplayRange: () => { start: number; end: number; total: number };
+  getCanPreviousPage: () => boolean;
+  getCanNextPage: () => boolean;
+  setPageIndex: (pageIndex: number) => void;
+  setPageSize: (pageSize: number) => void;
+  nextPage: () => void;
+  previousPage: () => void;
+  firstPage: () => void;
+  lastPage: () => void;
 };

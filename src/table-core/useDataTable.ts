@@ -1,5 +1,11 @@
 import { useReducer, useState } from "react";
 import {
+  clampPageIndex,
+  getDisplayRange,
+  getPageCount,
+  pageIndexForNewPageSize,
+} from "./features/pagination";
+import {
   directionOf,
   nextSortingOrder,
   resolveSortDescFirst,
@@ -33,6 +39,7 @@ type TableCache<TData> = {
   stable: Table<TData> | null;
   getAllColumns: (() => Column<TData>[]) | null;
   getSortedRowModel: (() => RowModel<TData>) | null;
+  getPaginationRowModel: (() => RowModel<TData>) | null;
   getHeaders: (() => Header<TData>[]) | null;
   getCoreRowModel: (() => RowModel<TData>) | null;
 };
@@ -43,6 +50,7 @@ function createCache<TData>(): TableCache<TData> {
     stable: null,
     getAllColumns: null,
     getSortedRowModel: null,
+    getPaginationRowModel: null,
     getHeaders: null,
     getCoreRowModel: null,
   };
@@ -71,8 +79,25 @@ function createStableTable<TData>(cache: TableCache<TData>): Table<TData> {
     getCoreRowModel: () => requireLive(cache).getCoreRowModel(),
     getPreSortedRowModel: () => requireLive(cache).getPreSortedRowModel(),
     getSortedRowModel: () => requireLive(cache).getSortedRowModel(),
+    getPrePaginationRowModel: () =>
+      requireLive(cache).getPrePaginationRowModel(),
+    getPaginationRowModel: () => requireLive(cache).getPaginationRowModel(),
     getRowModel: () => requireLive(cache).getRowModel(),
     getRow: (id) => requireLive(cache).getRow(id),
+
+    getRowCount: () => requireLive(cache).getRowCount(),
+    getPageCount: () => requireLive(cache).getPageCount(),
+    getPageIndex: () => requireLive(cache).getPageIndex(),
+    getPageSize: () => requireLive(cache).getPageSize(),
+    getDisplayRange: () => requireLive(cache).getDisplayRange(),
+    getCanPreviousPage: () => requireLive(cache).getCanPreviousPage(),
+    getCanNextPage: () => requireLive(cache).getCanNextPage(),
+    setPageIndex: (pageIndex) => requireLive(cache).setPageIndex(pageIndex),
+    setPageSize: (pageSize) => requireLive(cache).setPageSize(pageSize),
+    nextPage: () => requireLive(cache).nextPage(),
+    previousPage: () => requireLive(cache).previousPage(),
+    firstPage: () => requireLive(cache).firstPage(),
+    lastPage: () => requireLive(cache).lastPage(),
   };
 }
 
@@ -235,8 +260,61 @@ export function useDataTable<TData>(
       return getModel();
     },
 
-    getRowModel: () => live.getSortedRowModel(),
+    getPrePaginationRowModel: () => live.getSortedRowModel(),
+
+    getPaginationRowModel: () => {
+      const factory = options.getPaginationRowModel;
+      if (!factory) return live.getPrePaginationRowModel();
+      const getModel = cache.getPaginationRowModel ?? factory(stable);
+      cache.getPaginationRowModel = getModel;
+      return getModel();
+    },
+
+    getRowModel: () => live.getPaginationRowModel(),
     getRow: (id) => live.getRowModel().rowsById[id],
+
+    getRowCount: () =>
+      options.manualPagination
+        ? (options.rowCount ?? 0)
+        : live.getPrePaginationRowModel().rows.length,
+
+    getPageCount: () =>
+      getPageCount(live.getRowCount(), state.pagination.pageSize),
+
+    getPageIndex: () =>
+      clampPageIndex(state.pagination.pageIndex, live.getPageCount()),
+
+    getPageSize: () => state.pagination.pageSize,
+
+    getDisplayRange: () =>
+      getDisplayRange(
+        live.getPageIndex(),
+        state.pagination.pageSize,
+        live.getRowCount(),
+      ),
+
+    getCanPreviousPage: () => live.getPageIndex() > 0,
+    getCanNextPage: () => live.getPageIndex() < live.getPageCount() - 1,
+
+    setPageIndex: (pageIndex) => {
+      live.setPagination((old) => ({ ...old, pageIndex }));
+    },
+
+    setPageSize: (pageSize) => {
+      live.setPagination((old) => ({
+        pageSize,
+        pageIndex: pageIndexForNewPageSize(
+          old.pageIndex,
+          old.pageSize,
+          pageSize,
+        ),
+      }));
+    },
+
+    nextPage: () => live.setPageIndex(live.getPageIndex() + 1),
+    previousPage: () => live.setPageIndex(live.getPageIndex() - 1),
+    firstPage: () => live.setPageIndex(0),
+    lastPage: () => live.setPageIndex(live.getPageCount() - 1),
   };
 
   cache.live = live;
