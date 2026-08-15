@@ -33,6 +33,8 @@ export type SortingFn<TData> = (
   columnId: string,
 ) => number;
 
+export type ValueSortingFn = (a: unknown, b: unknown) => number;
+
 export interface ColumnMeta {
   numeric?: boolean;
   priority?: 1 | 2 | 3;
@@ -80,6 +82,13 @@ export type Column<TData> = {
   accessor: (row: TData, index: number) => unknown;
   getSize: () => number;
   getIsPinned: () => boolean;
+
+  getCanSort: () => boolean;
+  getIsSorted: () => SortDirection | false;
+  getSortIndex: () => number;
+  getNextSortingOrder: () => SortDirection | false;
+  toggleSorting: (desc?: boolean, multi?: boolean) => void;
+  clearSorting: () => void;
 };
 
 export type Header<TData> = {
@@ -145,6 +154,7 @@ export type UseDataTableOptions<TData> = {
   onExpandedChange?: OnChangeFn<ExpandedState>;
 
   getCoreRowModel: RowModelFactory<TData>;
+  getSortedRowModel?: RowModelFactory<TData>;
 
   manualSorting?: boolean;
   manualPagination?: boolean;
@@ -167,6 +177,8 @@ export type Table<TData> = {
   getHeaders: () => Header<TData>[];
 
   getCoreRowModel: () => RowModel<TData>;
+  getPreSortedRowModel: () => RowModel<TData>;
+  getSortedRowModel: () => RowModel<TData>;
   getRowModel: () => RowModel<TData>;
   getRow: (id: string) => Row<TData> | undefined;
 };

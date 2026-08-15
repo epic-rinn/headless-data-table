@@ -1,5 +1,11 @@
 import { useReducer, useState } from "react";
 import {
+  directionOf,
+  nextSortingOrder,
+  resolveSortDescFirst,
+  toggleSortingState,
+} from "./features/sorting";
+import {
   createInitialState,
   isSliceControlled,
   resolveState,
@@ -12,6 +18,7 @@ import type {
   OnChangeFn,
   PaginationState,
   RowModel,
+  SortDirection,
   SortingState,
   Table,
   UseDataTableOptions,
@@ -25,6 +32,7 @@ type TableCache<TData> = {
   live: Table<TData> | null;
   stable: Table<TData> | null;
   getAllColumns: (() => Column<TData>[]) | null;
+  getSortedRowModel: (() => RowModel<TData>) | null;
   getHeaders: (() => Header<TData>[]) | null;
   getCoreRowModel: (() => RowModel<TData>) | null;
 };
@@ -34,6 +42,7 @@ function createCache<TData>(): TableCache<TData> {
     live: null,
     stable: null,
     getAllColumns: null,
+    getSortedRowModel: null,
     getHeaders: null,
     getCoreRowModel: null,
   };
@@ -60,22 +69,77 @@ function createStableTable<TData>(cache: TableCache<TData>): Table<TData> {
     getColumn: (id) => requireLive(cache).getColumn(id),
     getHeaders: () => requireLive(cache).getHeaders(),
     getCoreRowModel: () => requireLive(cache).getCoreRowModel(),
+    getPreSortedRowModel: () => requireLive(cache).getPreSortedRowModel(),
+    getSortedRowModel: () => requireLive(cache).getSortedRowModel(),
     getRowModel: () => requireLive(cache).getRowModel(),
     getRow: (id) => requireLive(cache).getRow(id),
   };
 }
 
-function buildColumns<TData>(cache: TableCache<TData>) {
+function buildColumns<TData>(cache: TableCache<TData>, stable: Table<TData>) {
   return memo(
     () => [requireLive(cache).options.columns] as const,
     (columnDefs): Column<TData>[] =>
-      dedupeColumns(columnDefs).map((columnDef) => ({
-        id: columnDef.id,
-        columnDef,
-        accessor: resolveAccessor(columnDef),
-        getSize: () => columnDef.size ?? DEFAULT_COLUMN_SIZE,
-        getIsPinned: () => columnDef.pin === "left",
-      })),
+      dedupeColumns(columnDefs).map((columnDef) => {
+        const id = columnDef.id;
+        const accessor = resolveAccessor(columnDef);
+
+        const sample = (): unknown => {
+          const first = stable.getPreSortedRowModel().rows[0];
+          return first ? accessor(first.original, first.index) : undefined;
+        };
+
+        const descFirst = () => resolveSortDescFirst(columnDef, sample());
+
+        const getIsSorted = (): SortDirection | false =>
+          directionOf(stable.getState().sorting, id);
+
+        const getCanSort = () => {
+          const options = stable.options;
+          if (columnDef.enableSorting !== true) return false;
+          return (
+            options.getSortedRowModel !== undefined ||
+            options.manualSorting === true
+          );
+        };
+
+        return {
+          id,
+          columnDef,
+          accessor,
+          getSize: () => columnDef.size ?? DEFAULT_COLUMN_SIZE,
+          getIsPinned: () => columnDef.pin === "left",
+
+          getCanSort,
+          getIsSorted,
+          getSortIndex: () =>
+            stable.getState().sorting.findIndex((sort) => sort.id === id),
+          getNextSortingOrder: () =>
+            nextSortingOrder(
+              getIsSorted(),
+              descFirst(),
+              stable.options.enableSortingRemoval !== false,
+            ),
+
+          toggleSorting: (desc?: boolean, multi?: boolean) => {
+            if (!getCanSort()) return;
+            const options = stable.options;
+
+            stable.setSorting((old) =>
+              toggleSortingState(old, id, {
+                desc,
+                multi: options.enableMultiSort === true && multi === true,
+                descFirst: descFirst(),
+                allowRemoval: options.enableSortingRemoval !== false,
+              }),
+            );
+          },
+
+          clearSorting: () => {
+            stable.setSorting((old) => old.filter((sort) => sort.id !== id));
+          },
+        };
+      }),
   );
 }
 
@@ -137,7 +201,7 @@ export function useDataTable<TData>(
   const stable = cache.stable ?? createStableTable(cache);
   cache.stable = stable;
 
-  const getAllColumns = cache.getAllColumns ?? buildColumns(cache);
+  const getAllColumns = cache.getAllColumns ?? buildColumns(cache, stable);
   cache.getAllColumns = getAllColumns;
 
   const getHeaders = cache.getHeaders ?? buildHeaders(cache, stable);
@@ -161,7 +225,17 @@ export function useDataTable<TData>(
       return getModel();
     },
 
-    getRowModel: () => live.getCoreRowModel(),
+    getPreSortedRowModel: () => live.getCoreRowModel(),
+
+    getSortedRowModel: () => {
+      const factory = options.getSortedRowModel;
+      if (!factory) return live.getPreSortedRowModel();
+      const getModel = cache.getSortedRowModel ?? factory(stable);
+      cache.getSortedRowModel = getModel;
+      return getModel();
+    },
+
+    getRowModel: () => live.getSortedRowModel(),
     getRow: (id) => live.getRowModel().rowsById[id],
   };
 
