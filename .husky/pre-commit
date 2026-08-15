@@ -1,0 +1,6 @@
+# Biome: format, lint and import-sort checks on staged files only.
+# Fails the commit on any violation — run `pnpm check:fix` to auto-fix.
+pnpm exec biome check --staged --no-errors-on-unmatched --reporter=summary
+
+# ESLint: Next.js-specific rules
+pnpm exec eslint
