@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { DataTableStatus } from "@/components/data-table";
 import { DataTable, DataTablePagination } from "@/components/data-table";
 import { Button } from "@/components/ui/Button";
@@ -8,6 +9,8 @@ import {
   AsyncAttendeePanel,
   AttendeeTable,
 } from "@/features/attendees/AttendeePanel";
+import { useTableUrlState } from "@/hooks/useTableUrlState";
+import { listSessions } from "@/mocks/api";
 import {
   type Attendee,
   createAttendees,
@@ -30,7 +33,7 @@ const paginationRowModel =
   getPaginationRowModel<ReturnType<typeof createSessions>[number]>();
 
 const STATUSES: DataTableStatus[] = ["success", "loading", "error"];
-const ROW_COUNTS = [0, 40, 1000];
+const ROW_COUNTS = [0, 40, 1000, 10000];
 type ExpandMode = "none" | "inline" | "on-demand";
 const EXPAND_MODES: ExpandMode[] = ["none", "inline", "on-demand"];
 
@@ -40,6 +43,36 @@ export function PlaygroundTable() {
   const [paginated, setPaginated] = useState(true);
   const [sortable, setSortable] = useState(true);
   const [expandMode, setExpandMode] = useState<ExpandMode>("inline");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const serverMode = searchParams.get("mode") === "server";
+
+  const setServerMode = useCallback(
+    (on: boolean) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (on) {
+        params.set("mode", "server");
+      } else {
+        params.delete("mode");
+        params.delete("sort");
+        params.delete("page");
+        params.delete("size");
+      }
+      const query = params.toString();
+      router.replace(query ? `?${query}` : "?", { scroll: false });
+    },
+    [router, searchParams],
+  );
+
+  const url = useTableUrlState({ defaultPageSize: 10 });
+  const serverSorting = url.sorting;
+  const serverPagination = url.pagination;
+  const [result, setResult] = useState<{
+    key: string;
+    rows: Session[];
+    total: number;
+    requests: number;
+  }>({ key: "", rows: [], total: 0, requests: 0 });
   const [failChild, setFailChild] = useState(false);
 
   const data = useMemo(() => createSessions(rowCount), [rowCount]);
@@ -63,14 +96,70 @@ export function PlaygroundTable() {
       });
   }, [expandMode, failChild]);
 
+  const lastPageIndex =
+    result.total > 0
+      ? Math.max(0, Math.ceil(result.total / serverPagination.pageSize) - 1)
+      : null;
+  const requestPageIndex =
+    lastPageIndex === null
+      ? serverPagination.pageIndex
+      : Math.min(serverPagination.pageIndex, lastPageIndex);
+
+  const requestKey = serverMode
+    ? JSON.stringify({
+        rows: rowCount,
+        sort: serverSorting,
+        page: requestPageIndex,
+        size: serverPagination.pageSize,
+      })
+    : "";
+  const serverLoading = serverMode && result.key !== requestKey;
+
+  useEffect(() => {
+    if (!serverMode) return;
+
+    const controller = new AbortController();
+
+    listSessions(
+      data,
+      {
+        page: requestPageIndex,
+        pageSize: serverPagination.pageSize,
+        sort: serverSorting,
+      },
+      controller.signal,
+    ).then(
+      (response) =>
+        setResult((old) => ({
+          key: requestKey,
+          rows: response.data,
+          total: response.total,
+          requests: old.requests + 1,
+        })),
+      () => {},
+    );
+
+    return () => controller.abort();
+  }, [serverMode, data, requestKey]);
+
   const table = useDataTable({
-    data,
+    data: serverMode ? result.rows : data,
     columns: sessionColumns,
     getRowId: (row) => row.id,
     initialState: { pagination: { pageIndex: 0, pageSize: 10 } },
     getCoreRowModel: coreRowModel,
     ...(sortable ? { getSortedRowModel: sortedRowModel } : {}),
     ...(paginated ? { getPaginationRowModel: paginationRowModel } : {}),
+    ...(serverMode
+      ? {
+          state: { sorting: serverSorting, pagination: serverPagination },
+          onSortingChange: url.setSorting,
+          onPaginationChange: url.setPagination,
+          manualSorting: true,
+          manualPagination: true,
+          rowCount: result.total,
+        }
+      : {}),
     ...(expandMode === "none"
       ? {}
       : {
@@ -129,6 +218,19 @@ export function PlaygroundTable() {
             children: {mode}
           </Button>
         ))}
+        <span className="mx-1 h-5 w-px bg-border-subtle" />
+        <Button
+          size="sm"
+          variant={serverMode ? "primary" : "secondary"}
+          onClick={() => setServerMode(!serverMode)}
+        >
+          {serverMode ? "server-side" : "client-side"}
+        </Button>
+        {serverMode ? (
+          <span className="text-2xs text-text-muted" data-numeric>
+            {result.requests} requests
+          </span>
+        ) : null}
         {expandMode === "on-demand" ? (
           <Button
             size="sm"
@@ -144,7 +246,7 @@ export function PlaygroundTable() {
         <DataTable
           table={table}
           caption="Playground sessions"
-          status={status}
+          status={serverMode && serverLoading ? "loading" : status}
           stickyHeader
           error={{
             title: "Couldn't load the sessions.",
@@ -166,7 +268,7 @@ export function PlaygroundTable() {
             description: "Nothing is on the timetable for this day.",
           }}
         />
-        {paginated && status === "success" ? (
+        {(paginated || serverMode) && status === "success" ? (
           <DataTablePagination table={table} itemNoun="classes" />
         ) : null}
       </div>

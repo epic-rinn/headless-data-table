@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { PageHeader } from "@/components/shell/PageHeader";
 import { PlaygroundTable } from "@/features/playground/PlaygroundTable";
 
@@ -9,7 +10,9 @@ export default function PlaygroundPage() {
         description="Every table feature toggled independently"
       />
       <div className="p-5">
-        <PlaygroundTable />
+        <Suspense fallback={null}>
+          <PlaygroundTable />
+        </Suspense>
       </div>
     </>
   );

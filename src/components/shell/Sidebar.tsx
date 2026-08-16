@@ -12,7 +12,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
 
-  const labelClass = collapsed ? "lg:hidden" : "hidden lg:inline";
+  const labelClass = collapsed ? "hidden" : "hidden lg:inline";
 
   return (
     <aside
@@ -25,8 +25,10 @@ export function Sidebar() {
       <div className="flex h-14 items-center gap-2 px-4">
         <span
           aria-hidden
-          className="size-4.5 shrink-0 rounded-[5px] bg-accent"
-        />
+          className="flex size-4.5 shrink-0 items-center justify-center rounded-[5px] bg-accent font-display text-2xs font-bold leading-none text-accent-ink"
+        >
+          R
+        </span>
         <span
           className={clsx(
             "truncate font-display text-base font-semibold tracking-tight",
@@ -67,16 +69,18 @@ export function Sidebar() {
         </ul>
       </nav>
 
-      <div className="border-t border-border-subtle p-2">
+      <div className="hidden border-t border-border-subtle p-2 lg:block">
         <Button
           variant="ghost"
           size="sm"
           icon={collapsed ? PanelLeft : PanelLeftClose}
           onClick={() => setCollapsed((c) => !c)}
           aria-expanded={!collapsed}
-          className="hidden w-full justify-start lg:inline-flex"
+          className="w-full justify-start overflow-hidden"
         >
-          <span className={collapsed ? "hidden" : undefined}>Collapse</span>
+          <span className={clsx("truncate", collapsed && "hidden")}>
+            Collapse
+          </span>
         </Button>
       </div>
     </aside>
