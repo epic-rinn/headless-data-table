@@ -2,14 +2,14 @@
 
 import { DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/Button";
+import type { Attendee } from "@/mocks/seed";
 import {
   type AsyncSubRowsState,
   getCoreRowModel,
   getSortedRowModel,
   useDataTable,
 } from "@/table-core";
-import { attendeeColumns } from "./attendeeColumns";
-import type { Attendee } from "./data";
+import { attendeeColumns } from "./columns";
 
 const coreRowModel = getCoreRowModel<Attendee>();
 const sortedRowModel = getSortedRowModel<Attendee>();

@@ -1,6 +1,6 @@
 import { STUDIO_TIMEZONE } from "@/constants";
+import type { Session, SessionLevel } from "@/mocks/seed";
 import { createColumnHelper } from "@/table-core";
-import type { Session, SessionLevel } from "./data";
 
 const timeFormat = new Intl.DateTimeFormat("en-GB", {
   hour: "2-digit",
@@ -58,7 +58,7 @@ export const sessionColumns = [
       </div>
     ),
   }),
-  col.accessor("instructor", {
+  col.computed("instructor", (row) => row.instructor.name, {
     header: "Instructor",
     enableSorting: true,
     size: 150,

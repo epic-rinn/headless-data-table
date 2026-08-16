@@ -5,19 +5,22 @@ import type { DataTableStatus } from "@/components/data-table";
 import { DataTable, DataTablePagination } from "@/components/data-table";
 import { Button } from "@/components/ui/Button";
 import {
-  getCoreRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
-  useDataTable,
-} from "@/table-core";
-import { AsyncAttendeePanel, AttendeeTable } from "./AttendeePanel";
-import { sessionColumns } from "./columns";
+  AsyncAttendeePanel,
+  AttendeeTable,
+} from "@/features/attendees/AttendeePanel";
 import {
   type Attendee,
   createAttendees,
   createSessions,
   type Session,
-} from "./data";
+} from "@/mocks/seed";
+import {
+  getCoreRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  useDataTable,
+} from "@/table-core";
+import { sessionColumns } from "./columns";
 
 const coreRowModel =
   getCoreRowModel<ReturnType<typeof createSessions>[number]>();

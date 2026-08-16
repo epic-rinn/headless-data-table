@@ -1,5 +1,5 @@
+import type { Attendee } from "@/mocks/seed";
 import { createColumnHelper } from "@/table-core";
-import type { Attendee } from "./data";
 
 const PAYMENT_LABEL: Record<Attendee["paymentType"], string> = {
   one_time: "Drop-in",

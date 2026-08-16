@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/shell/PageHeader";
+import { TimetableTable } from "@/features/timetable/TimetableTable";
 
 export default function TimetablePage() {
   return (
@@ -7,7 +8,9 @@ export default function TimetablePage() {
         title="Timetable"
         description="What's running today, and who's walking through the door"
       />
-      <div className="p-5" />
+      <div className="p-5">
+        <TimetableTable />
+      </div>
     </>
   );
 }

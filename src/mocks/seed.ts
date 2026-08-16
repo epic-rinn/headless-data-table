@@ -1,10 +1,12 @@
 export type SessionLevel = "all" | "beginner" | "intermediate" | "advanced";
 
+export type Instructor = { name: string; covering: boolean };
+
 export type Session = {
   id: string;
   name: string;
   room: string;
-  instructor: string;
+  instructor: Instructor;
   startsAt: string;
   durationMin: number;
   capacity: number;
@@ -15,6 +17,7 @@ export type Session = {
   equipment: string;
   priceGbp: number;
   status: "scheduled" | "full" | "cancelled";
+  cancellationReason?: string;
 };
 
 const NAMES = [
@@ -57,8 +60,31 @@ function lcg(seed: number): () => number {
   };
 }
 
+function isoAt(seed: number, hour: number, minute: number): string {
+  const year = Math.floor(seed / 10000);
+  const month = Math.floor((seed % 10000) / 100);
+  const day = seed % 100;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${year}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(minute)}:00Z`;
+}
+
 function pick<T>(random: () => number, list: readonly T[], fallback: T): T {
   return list[Math.floor(random() * list.length)] ?? fallback;
+}
+
+const CANCELLATION_REASONS = [
+  "Instructor unwell",
+  "Studio maintenance",
+  "Below minimum numbers",
+  "Equipment fault",
+];
+
+export function dateSeed(date: Date): number {
+  return (
+    date.getUTCFullYear() * 10000 +
+    (date.getUTCMonth() + 1) * 100 +
+    date.getUTCDate()
+  );
 }
 
 export function createSessions(count: number, seed = 20260816): Session[] {
@@ -85,8 +111,11 @@ export function createSessions(count: number, seed = 20260816): Session[] {
       id: `s${index}`,
       name: pick(random, NAMES, "Vinyasa Flow"),
       room: pick(random, ROOMS, "Studio 1"),
-      instructor: pick(random, INSTRUCTORS, "Ama Osei"),
-      startsAt: `2026-08-16T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00Z`,
+      instructor: {
+        name: pick(random, INSTRUCTORS, "Ama Osei"),
+        covering: random() < 0.15,
+      },
+      startsAt: isoAt(seed, hour, minute),
       durationMin: pick(random, DURATIONS, 45),
       capacity,
       booked,
@@ -98,6 +127,9 @@ export function createSessions(count: number, seed = 20260816): Session[] {
       equipment: pick(random, EQUIPMENT, "Mat"),
       priceGbp: 8 + Math.floor(random() * 22) + (random() < 0.5 ? 0 : 0.5),
       status,
+      cancellationReason: cancelled
+        ? pick(random, CANCELLATION_REASONS, "Instructor unwell")
+        : undefined,
     });
   }
 
