@@ -82,6 +82,9 @@ export type Column<TData> = {
   accessor: (row: TData, index: number) => unknown;
   getSize: () => number;
   getIsPinned: () => boolean;
+  /** Sum of the sizes of the left-pinned columns preceding this one. */
+  getPinOffset: () => number;
+  getIsLastPinned: () => boolean;
 
   getCanSort: () => boolean;
   getIsSorted: () => SortDirection | false;

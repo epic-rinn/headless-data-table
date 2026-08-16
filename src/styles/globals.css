@@ -61,6 +61,25 @@
   }
 }
 
+@layer components {
+  [data-pin-edge]::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 10px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 150ms ease;
+    background: linear-gradient(to right, rgb(0 0 0 / 0), var(--pin-shadow));
+  }
+
+  [data-scrolled-x="true"] [data-pin-edge]::after {
+    opacity: 1;
+  }
+}
+
 @layer utilities {
   .sr-only {
     position: absolute;

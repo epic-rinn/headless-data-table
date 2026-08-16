@@ -22,11 +22,17 @@ export function DataTableHead<TData>({
           const sorted = column.getIsSorted();
           const { align, meta } = column.columnDef;
           const resolved = align ?? (meta?.numeric ? "end" : "start");
+          const pinned = column.getIsPinned();
 
           return (
             <th
               key={header.id}
               scope="col"
+              data-pinned={pinned || undefined}
+              data-pin-edge={(pinned && column.getIsLastPinned()) || undefined}
+              style={{
+                left: pinned ? `${column.getPinOffset()}px` : undefined,
+              }}
               aria-sort={
                 canSort
                   ? sorted === "asc"
@@ -45,7 +51,15 @@ export function DataTableHead<TData>({
                   : resolved === "center"
                     ? "text-center"
                     : "text-left",
-                sticky && "sticky top-0 z-(--z-header)",
+                (sticky || pinned) && "sticky",
+                sticky && "top-0",
+                pinned && sticky
+                  ? "z-(--z-header-pinned)"
+                  : pinned
+                    ? "z-(--z-pinned)"
+                    : sticky
+                      ? "z-(--z-header)"
+                      : undefined,
               )}
             >
               {canSort ? (

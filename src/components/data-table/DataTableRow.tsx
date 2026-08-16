@@ -15,15 +15,22 @@ function cellAlignment<TData>(cell: Cell<TData>): string {
 function DataTableCell<TData>({ cell }: { cell: Cell<TData> }) {
   const numeric = cell.column.columnDef.meta?.numeric === true;
   const value = cell.getValue();
+  const pinned = cell.column.getIsPinned();
 
   return (
     <td
       data-numeric={numeric || undefined}
+      data-pinned={pinned || undefined}
+      data-pin-edge={(pinned && cell.column.getIsLastPinned()) || undefined}
       className={clsx(
         "truncate border-b border-border-subtle px-(--cell-pad-x) align-middle",
         cellAlignment(cell),
+        pinned && "sticky z-(--z-pinned) bg-surface group-hover:bg-row-hover",
       )}
-      style={{ height: "var(--row-height)" }}
+      style={{
+        height: "var(--row-height)",
+        left: pinned ? `${cell.column.getPinOffset()}px` : undefined,
+      }}
       title={typeof value === "string" ? value : undefined}
     >
       {cell.render()}

@@ -7,6 +7,7 @@ import { DataTableHead } from "./DataTableHead";
 import { DataTableRow } from "./DataTableRow";
 import { SkeletonRows } from "./SkeletonRows";
 import { EmptyState, ErrorState } from "./TableStates";
+import { useScrollShadow } from "./useScrollShadow";
 
 export type DataTableStatus = "idle" | "loading" | "success" | "error";
 
@@ -34,6 +35,7 @@ export function DataTable<TData>({
   className,
 }: DataTableProps<TData>) {
   const [announcement, setAnnouncement] = useState("");
+  const scrollRef = useScrollShadow();
 
   const columns = table.getAllColumns();
   const rows = table.getRowModel().rows;
@@ -50,8 +52,9 @@ export function DataTable<TData>({
   return (
     <div className={clsx("flex flex-col", className)}>
       <div
+        ref={scrollRef}
         aria-busy={loading || undefined}
-        className="overflow-x-auto rounded-lg border border-border-subtle bg-surface"
+        className="relative overflow-x-auto rounded-lg border border-border-subtle bg-surface"
       >
         <table
           className="w-full table-fixed border-collapse text-sm"

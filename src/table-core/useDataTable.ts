@@ -5,6 +5,7 @@ import {
   getPageCount,
   pageIndexForNewPageSize,
 } from "./features/pagination";
+import { computePinning } from "./features/pinning";
 import {
   directionOf,
   nextSortingOrder,
@@ -104,8 +105,11 @@ function createStableTable<TData>(cache: TableCache<TData>): Table<TData> {
 function buildColumns<TData>(cache: TableCache<TData>, stable: Table<TData>) {
   return memo(
     () => [requireLive(cache).options.columns] as const,
-    (columnDefs): Column<TData>[] =>
-      dedupeColumns(columnDefs).map((columnDef) => {
+    (columnDefs): Column<TData>[] => {
+      const defs = dedupeColumns(columnDefs);
+      const pinning = computePinning(defs, DEFAULT_COLUMN_SIZE);
+
+      return defs.map((columnDef) => {
         const id = columnDef.id;
         const accessor = resolveAccessor(columnDef);
 
@@ -134,6 +138,8 @@ function buildColumns<TData>(cache: TableCache<TData>, stable: Table<TData>) {
           accessor,
           getSize: () => columnDef.size ?? DEFAULT_COLUMN_SIZE,
           getIsPinned: () => columnDef.pin === "left",
+          getPinOffset: () => pinning.offsets[id] ?? 0,
+          getIsLastPinned: () => pinning.lastPinnedId === id,
 
           getCanSort,
           getIsSorted,
@@ -164,7 +170,8 @@ function buildColumns<TData>(cache: TableCache<TData>, stable: Table<TData>) {
             stable.setSorting((old) => old.filter((sort) => sort.id !== id));
           },
         };
-      }),
+      });
+    },
   );
 }
 
