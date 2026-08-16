@@ -11,7 +11,24 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { href: "/playground", label: "Playground", icon: FlaskConical },
 ];
 
-export const STUDIO_TIMEZONE = "Europe/London";
+const FALLBACK_TIMEZONE = "Asia/Bangkok";
+
+function resolveTimeZone(value: string | undefined): string {
+  if (!value) return FALLBACK_TIMEZONE;
+  try {
+    new Intl.DateTimeFormat("en-GB", { timeZone: value });
+    return value;
+  } catch {
+    console.warn(
+      `Invalid NEXT_PUBLIC_STUDIO_TIMEZONE "${value}". Falling back to ${FALLBACK_TIMEZONE}.`,
+    );
+    return FALLBACK_TIMEZONE;
+  }
+}
+
+export const STUDIO_TIMEZONE = resolveTimeZone(
+  process.env.NEXT_PUBLIC_STUDIO_TIMEZONE,
+);
 
 export const SIDEBAR_WIDTH = {
   expanded: "lg:w-53",
