@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { STUDIO_TIMEZONE } from "@/constants";
 
 let cached: number | null = null;
 
@@ -19,6 +20,19 @@ export function useClientNow(): number | null {
   return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 }
 
-export function startOfUtcDay(timestamp: number): Date {
-  return new Date(new Date(timestamp).toISOString().slice(0, 10));
+const dayParts = new Intl.DateTimeFormat("en-GB", {
+  timeZone: STUDIO_TIMEZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+export function startOfStudioDay(timestamp: number): Date {
+  const parts = dayParts.formatToParts(new Date(timestamp));
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "01";
+
+  return new Date(
+    `${value("year")}-${value("month")}-${value("day")}T00:00:00Z`,
+  );
 }

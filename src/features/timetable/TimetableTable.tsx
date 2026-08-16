@@ -4,7 +4,6 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import { DataTable, DataTablePagination } from "@/components/data-table";
 import { Button, IconButton } from "@/components/ui/Button";
-import { STUDIO_TIMEZONE } from "@/constants";
 import { AttendeeTable } from "@/features/attendees/AttendeePanel";
 import { createAttendees, createSessions, dateSeed } from "@/mocks/seed";
 import {
@@ -14,7 +13,7 @@ import {
   useDataTable,
 } from "@/table-core";
 import { createTimetableColumns } from "./columns";
-import { startOfUtcDay, useClientNow } from "./useClientNow";
+import { startOfStudioDay, useClientNow } from "./useClientNow";
 
 const coreRowModel =
   getCoreRowModel<ReturnType<typeof createSessions>[number]>();
@@ -27,7 +26,7 @@ const dayFormat = new Intl.DateTimeFormat("en-GB", {
   weekday: "short",
   day: "numeric",
   month: "short",
-  timeZone: STUDIO_TIMEZONE,
+  timeZone: "UTC",
 });
 
 function addDays(date: Date, days: number): Date {
@@ -39,7 +38,7 @@ function addDays(date: Date, days: number): Date {
 export function TimetableTable() {
   const now = useClientNow();
   const [picked, setPicked] = useState<Date | null>(null);
-  const date = picked ?? (now === null ? null : startOfUtcDay(now));
+  const date = picked ?? (now === null ? null : startOfStudioDay(now));
 
   const columns = useMemo(() => createTimetableColumns(now), [now]);
 
