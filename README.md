@@ -1,83 +1,32 @@
 # Headless Table
 
-A data table built from scratch — no TanStack Table, no AG Grid, no `react-table`. The architecture borrows TanStack's row-model pipeline, but none of its code.
-
-It ships as two layers that can be used independently:
+A data table built from scratch — no TanStack Table, AG Grid or `react-table`. The row-model architecture is borrowed; none of the code is.
 
 | Layer | Path | Knows about |
 | --- | --- | --- |
-| Headless core | `src/table-core/` | Row types, column definitions, state, the row-model pipeline. No JSX for UI, no CSS, no DOM, no `next/*`. |
-| Styled layer | `src/components/data-table/` | Markup, tokens, sticky behaviour, skeletons, transitions. Knows nothing about classes or attendees. |
-| Product | `src/app/`, `src/features/` | Column definitions, seeded data, page composition, copy. |
+| Core | `src/table-core/` | Types, state, row models. No JSX, CSS, DOM or `next/*`. |
+| Styled | `src/components/data-table/` | Markup, tokens, sticky, skeletons. No domain nouns. |
+| Product | `src/app/`, `src/features/` | Column defs, seeded data, copy. |
 
-The demo is a fitness studio's front desk: what's running today, which classes are full, who has walked in.
+Demo: a fitness studio front desk. `/timetable` is the real page, `/playground` toggles every feature independently.
 
 ## Setup
 
 ```bash
 pnpm install
-pnpm dev          # http://localhost:3000
+pnpm dev      # localhost:3000
 ```
 
-```bash
-pnpm build        # production build
-pnpm start        # serve the production build
-pnpm typecheck    # tsc --noEmit
-pnpm lint         # eslint
-pnpm check        # biome: format, lint, import order
-pnpm check:fix    # ...and apply
-```
+| Command | Does |
+| --- | --- |
+| `pnpm build` / `pnpm start` | production build / serve it |
+| `pnpm typecheck` | `tsc --noEmit` |
+| `pnpm lint` | eslint |
+| `pnpm check` / `check:fix` | biome format, lint, import order |
 
-Requires Node 20+ and pnpm.
+Node 20+, pnpm.
 
-## Pages
-
-- **`/timetable`** — the real page. Client-side sorting and pagination, inline attendee expansion, day navigation, card layout on phones.
-- **`/playground`** — every feature toggled independently: fetch status, row count up to 10,000, sorting on/off, pagination on/off, children none/inline/on-demand, child-fetch failure injection, and a client/server switch. Each toggle maps to *not passing an option*, which is what makes the opt-in architecture visible.
-
-## Defining columns
-
-Columns are built through a helper that infers the value type from the key. Consumers never annotate a type parameter:
-
-```tsx
-const col = createColumnHelper<Session>();
-
-const columns = [
-  col.accessor("name", {
-    header: "Class",
-    pin: "left",
-    enableSorting: true,
-    cell: (info) => info.getValue().toUpperCase(),
-    //                    ^? string
-  }),
-  col.computed("instructor", (row) => row.instructor.name, {
-    header: "Instructor",
-    cell: (info) => info.getValue(),
-    //                    ^? string
-  }),
-  col.accessor("booked", {
-    header: "Attendance",
-    meta: { numeric: true, priority: 2 },
-    cell: (info) => `${info.getValue()} / ${info.row.original.capacity}`,
-    //                      ^? number
-  }),
-  col.display("actions", { header: "" }),
-];
-```
-
-`accessorKey` is deliberately **top-level only** — there is no `DeepKeys<TData>` and no `"instructor.name"` string paths. Recursive conditional types over a real domain model produce unreadable errors and hit the instantiation-depth ceiling. Nested access goes through `col.computed`, which is three characters longer, refactor-safe, and survives a rename.
-
-### The one type assertion
-
-`ColumnDefInput` is contravariant in `TValue` because `TValue` sits in the `cell` parameter position. So `ColumnDefInput<Row, string>` is *not* assignable to `ColumnDefInput<Row, unknown>`, and an array of columns with mixed value types has no useful common supertype. This is why TanStack's public type is `ColumnDef<TData, any>` — that `any` is load-bearing.
-
-This codebase erases at the boundary instead. `createColumnHelper` infers `TValue` locally and stores the column with it erased, behind **the single type assertion in `src/table-core/`**. Soundness holds because `TValue` is captured inside the closures the stored object carries; nothing downstream re-reads it.
-
-`Row.getValue(columnId)` returns `unknown` rather than a caller-chosen `getValue<T>()`. The latter looks convenient and is a lie — nothing checks it. Where the type is genuinely knowable, the context carries it: `info.getValue()` inside a cell is fully typed.
-
-## Features are opt-in
-
-The table is assembled from row models. Not passing one means the feature does not exist — no dead affordances, no disabled buttons:
+## Component API
 
 ```tsx
 const table = useDataTable({
@@ -85,180 +34,165 @@ const table = useDataTable({
   columns,
   getRowId: (row) => row.id,
   getCoreRowModel: coreRowModel,        // required
-  getSortedRowModel: sortedRowModel,    // omit -> no sort buttons, no aria-sort
-  getPaginationRowModel: pageRowModel,  // omit -> every row renders
+  getSortedRowModel: sortedRowModel,    // omit → no sort buttons, no aria-sort
+  getPaginationRowModel: pageRowModel,  // omit → every row renders
 });
+
+<DataTable table={table} caption="Classes" />
+<DataTablePagination table={table} />
 ```
 
-With both optional models removed you get a plain table: zero sort buttons, zero `aria-sort` attributes, no pagination nav. Verified in the browser, not assumed.
+Features are opt-in via row models. Omit one and the feature does not exist — no disabled buttons, no dead affordances. Pipeline: `core → sorted → paginated`, each stage memoised on its own deps, so paging a sorted 10k list does not re-sort.
 
-The pipeline is `core -> sorted -> paginated`, each stage memoised on its own dependencies. Paging a sorted 10,000-row list reuses the cached sorted model rather than re-sorting.
+Pagination is a separate export, not baked in.
 
-## Client-side vs server-side
+### Column definitions
 
-The same component covers both. State resolution happens per slice:
-
-> A slice is **controlled** if its key exists in `state`. Otherwise it is **uncontrolled** and lives in the hook's reducer. In **both** cases the `on*Change` callback fires — uncontrolled is not silent.
+`createColumnHelper<TData>()` infers the value type. Consumers never annotate.
 
 ```tsx
-// uncontrolled: the hook owns sorting
-useDataTable({ data, columns, getCoreRowModel, getSortedRowModel });
+const col = createColumnHelper<Session>();
 
-// controlled: the page owns sorting, and can sync it to the URL
+col.accessor("name", { header: "Class", pin: "left", enableSorting: true,
+  cell: (info) => info.getValue().toUpperCase() });         // ^? string
+
+col.computed("instructor", (row) => row.instructor.name, {
+  header: "Instructor", cell: (info) => info.getValue() });  // ^? string
+
+col.display("actions", { header: "" });                      // no value
+```
+
+| Rule | Why |
+| --- | --- |
+| `accessorKey` is top-level only | No `DeepKeys` recursion. Nested access uses `col.computed` — refactor-safe, survives renames. |
+| `Row.getValue()` returns `unknown` | A caller-chosen `getValue<T>()` is an unchecked cast with nicer syntax. Cell contexts carry the real type. |
+| One type assertion in the core | `ColumnDefInput` is contravariant in `TValue`, so mixed-value column arrays have no common supertype. The helper infers locally, then erases at the boundary. TanStack uses `any` here; erasure gives the same ergonomics without it. |
+
+`meta` carries styled-layer hints: `numeric` (tabular figures, end-aligned), `priority` (card layout), `headerTooltip`.
+
+### Sorting functions
+
+A column picks the comparator suited to its data — the cheapest one that is still correct.
+
+| Fn | For | Compares by |
+| --- | --- | --- |
+| `number` | numeric, currency | numeric, `NaN` last — no string coercion |
+| `datetime` | dates, ISO strings | epoch ms as integers |
+| `alphanumeric` | text | `Intl.Collator`, numeric-aware (`item2` before `item10`) |
+| `basic` | booleans, mixed | coerce to a primitive, then compare |
+| `auto` (default) | anything | inspects the first non-nullish value, dispatches once per sort |
+
+Collating numbers as strings is slower *and* wrong (`10` before `9`), so numeric columns skip locale handling entirely.
+
+Rules: three-state cycle (none → first → second → none); `sortDescFirst` defaults true for numeric and date; `null`/`undefined` forced last **before** the comparator, so they stay last in both directions; equal keys keep source order; unknown sort ids warn and pass through.
+
+Built-ins compare precomputed values (*n* accessor calls). A custom `sortingFn` receives rows and pays that cost only when used.
+
+> Sorting reads the **accessor value, not the rendered cell**. A cell mapping `one_time` → "Drop-in" still sorts by `one_time`. Pass an explicit comparator where that ordering is meaningless — Level and Status rank semantically.
+
+## Client vs server
+
+One component, both modes. Resolution is per slice:
+
+> A slice is **controlled** if its key exists in `state`; otherwise it lives in the hook's reducer. **Either way `on*Change` fires** — uncontrolled is not silent.
+
+```tsx
 useDataTable({
-  data,
+  data: page,
   columns,
-  state: { sorting },
+  state: { sorting, pagination },
   onSortingChange: setSorting,
-  manualSorting: true,   // the sorted model is bypassed
+  onPaginationChange: setPagination,
+  manualSorting: true,
   manualPagination: true,
-  rowCount: total,       // required when manualPagination
+  rowCount: total,          // required with manualPagination
   getCoreRowModel,
 });
 ```
 
-`manualSorting` and `manualPagination` **short-circuit rather than disable**. The sorted model is skipped, but `state.sorting`, `aria-sort`, the header cycle and `onSortingChange` keep working — which is exactly what lets one component serve both modes.
+`manualSorting` / `manualPagination` **short-circuit, not disable**: the model is skipped but `state.sorting`, `aria-sort`, the header cycle and callbacks keep working. That is what lets one component serve both.
 
-The playground's **client/server switch** runs this end to end against a mock endpoint that sorts and paginates the full dataset itself and returns only the requested page. It shows a live request counter, so you can confirm a sort click issues exactly one request and that the table renders only what the server sent.
+Updaters pass through unresolved (`T | ((old: T) => T)`), so the parent applies them against its own current state.
 
-### URL as the source of truth
+### URL state
 
-`useTableUrlState` keeps sorting and pagination in the query string, in the spirit of `nuqs` but with no dependency — just `useSearchParams` and `router.replace`:
+`useTableUrlState` keeps sorting and pagination in the query string — `nuqs` ergonomics, no dependency.
 
 ```tsx
 const url = useTableUrlState({ defaultPageSize: 10 });
-
-useDataTable({
-  data: rows,
-  columns,
-  state: { sorting: url.sorting, pagination: url.pagination },
-  onSortingChange: url.setSorting,
-  onPaginationChange: url.setPagination,
-  manualSorting: true,
-  manualPagination: true,
-  rowCount: total,
-  getCoreRowModel,
-});
+// → ?sort=priceGbp.desc&page=3&size=25
 ```
 
-`?sort=priceGbp.desc&page=3&size=25` — multi-sort serialises comma-separated. Parameters at their default are omitted, so a pristine table has a clean URL. Changing the sort returns to page one. Because the URL is the state, the back button works with no extra code: `useSearchParams` re-renders on history navigation and the table follows.
+Defaults omitted, multi-sort comma-separated, sort changes reset to page one. The back button works for free — `useSearchParams` re-renders on history navigation. Requires a `<Suspense>` boundary.
 
-The component using it must sit inside a `<Suspense>` boundary, otherwise `useSearchParams` makes the whole client tree above it render on the client.
-
-**Out-of-range pages are clamped on the request, not written back.** A deep link to `?page=3` on a two-page result renders the last page instead of an empty table. Correcting the URL instead looks tidier and is a trap: the write triggers a navigation, which re-runs the fetch, which can correct again — an oscillation. Clamping the request keeps a single source of truth and settles.
-
-Updaters are passed through unresolved (`T | ((old: T) => T)`), so a parent applies them against its own current state instead of a value read too early.
-
-## Sorting
-
-A column picks the comparator suited to its data, so each dataset is sorted by the cheapest algorithm that is still correct for it:
-
-| `sortingFn` | Use for | How it compares |
-| --- | --- | --- |
-| `number` | numeric and currency columns | direct numeric comparison, `NaN` last — no string coercion, no locale machinery |
-| `datetime` | dates and ISO strings | compares epoch milliseconds as integers |
-| `alphanumeric` | human-readable text | `Intl.Collator` with numeric collation, so `item2` precedes `item10` and case and accents fold correctly |
-| `basic` | booleans, mixed or unknown shapes | coerces to a comparable primitive, then compares |
-| `auto` (default) | anything | inspects the first non-nullish value and dispatches to one of the above, once per sort rather than once per comparison |
-
-The distinction matters at scale. `Intl.Collator` is the correct tool for text and the wrong one for numbers — collating 10,000 numbers as strings is both slower and wrong (`10` would sort before `9`). Picking `number` for a price column skips locale handling entirely. `auto` resolves the choice a single time when the sort begins, so per-comparison cost stays flat.
-
-Any column can override with an explicit comparator when the data has an order the type system cannot infer — see the note on enum columns below.
-
-- Three-state cycle: none → first → second → none. `sortDescFirst` defaults to true for numeric and date columns, false for text, so clicking a money column shows the largest first.
-- `null` and `undefined` are forced last **before** the comparator runs, so they stay last in both directions instead of flipping with `desc`.
-- Equal keys keep their original order; ties fall back to the source index.
-- Unknown sort ids warn and pass data through — never throw.
-- Multi-sort is behind `enableMultiSort` (shift-click).
-
-**Built-in comparators compare values; custom ones compare rows.** The built-ins receive precomputed values, so a sort costs *n* accessor calls rather than *n log n*. A consumer-supplied `sortingFn` gets whole rows and pays that cost only when used.
-
-One caveat worth knowing: sorting reads the **accessor value, not the rendered cell**. A column whose cell maps `one_time` to "Drop-in" sorts by `one_time`. Where that ordering would be meaningless, pass an explicit comparator — the Level and Status columns do exactly this, ranking semantically instead of alphabetically.
+Out-of-range pages are **clamped on the request, not written back**. Writing a correction triggers a navigation, which refetches, which corrects again — an oscillation.
 
 ## Expandable rows
 
-Two shapes exist in the wild. Homogeneous sub-rows (a tree) belong *in* the row model. Heterogeneous detail panels — classes have attendees, a different shape entirely — do not: forcing them through the parent's columns means union types and null-padded cells.
-
-Only the heterogeneous shape is built, because both required modes map onto it:
+Detail panels are heterogeneous — attendees are not classes. Forcing them through the parent's columns means union types and null-padded cells, so the core owns **state and lifecycle**, the consumer owns **rendering**.
 
 ```tsx
-<DataTable
-  table={table}
-  renderExpanded={(row, sub) => <AttendeeTable attendees={sub.data} />}
-/>
+// inline: children already on the row
+<DataTable table={table}
+  renderExpanded={(row) => <AttendeeTable attendees={row.original.attendees} />} />
+
+// on-demand: sub carries idle | loading | success | error
+<DataTable table={table}
+  renderExpanded={(row, sub) => <AsyncAttendeePanel state={sub} />} />
 ```
 
-- **Inline** — children already present on the row. No fetching.
-- **On-demand** — pass `loadSubRows`; the core owns the lifecycle and hands `renderExpanded` an `AsyncSubRowsState<TSubData>`.
+| Mode | Setup |
+| --- | --- |
+| **Inline** | Children already on the row. No fetching. |
+| **On-demand** | Pass `loadSubRows`; the core runs the lifecycle and hands `renderExpanded` an `AsyncSubRowsState<TSubData>`. |
 
-`TSubData` is inferred from `loadSubRows`, so the panel receives `Attendee[]`, not `unknown`. When `loadSubRows` is absent, `TSubData` is `never` and reading detail data is a compile error.
+`TSubData` is inferred from `loadSubRows`. Without it, `TSubData` is `never` and reading detail data is a compile error.
 
-Lifecycle, all verified in a browser:
+Lifecycle:
 
-1. First expand → `loading`.
-2. Success caches by row id; collapse and re-expand is instant, no refetch.
-3. Collapse mid-flight aborts the request and returns to `idle`.
-4. Failure → `error` with a `retry()` callable repeatedly. **`retry` reads the current loader**, not the one it closed over — otherwise a changed token or filter would silently re-run the stale one.
-5. A change of `data` identity clears the whole cache.
-6. An empty result is **success with an empty list**, not an error. It renders "No one booked in yet."
+1. First expand → `loading`
+2. Success caches by row id — re-expanding never refetches
+3. Collapse mid-flight → `abort()`, back to `idle`
+4. Failure → `error` with a repeatable `retry()` that reads the **current** loader, not the one it closed over
+5. New `data` identity → clear the cache
+6. Empty result is **success**, not error
 
-The panel is one `<tr>` with a `<td colSpan>`, animated with the `grid-template-rows: 0fr → 1fr` technique — no measurement, no `ResizeObserver`.
+Renders as one `<tr>` with a `<td colSpan>`, animated `grid-template-rows: 0fr → 1fr` — no measurement, no `ResizeObserver`.
 
 ## Sticky column
 
-`table-layout: fixed` plus a `<colgroup>` generated from each column's `size`, so pinned offsets are computed arithmetically (sum of preceding pinned widths) with no measurement pass.
+`table-layout: fixed` + a `<colgroup>` from column `size`, so pinned offsets are arithmetic (sum of preceding pinned widths) — no measurement pass.
 
-The offsets are exact precisely when they matter: sticky positioning only has a visible effect when the container scrolls, and it only scrolls when the columns overflow — which is the case where the browser honours declared widths exactly. When widths are redistributed there is no overflow, so nothing is stuck.
+Offsets are exact exactly when they matter: sticky only shows when the container scrolls, which only happens when columns overflow, which is when the browser honours declared widths.
 
-Four z-index levels (`--z-cell` → `--z-header-pinned`) are defined in one place, and each cell resolves to exactly one of them; emitting several competing classes makes the winner depend on CSS source order.
+- Four z-index levels defined in one place; each cell resolves to **one** — emitting competing classes makes the winner depend on CSS source order.
+- Pinned cells carry an opaque background and inherit row hover.
+- Scroll shadow is a `data-scrolled-x` attribute written by a passive, rAF-throttled listener. **No React state, so scrolling never re-renders.**
+- The shadow is drawn *inside* the pinned edge; outside, `overflow: hidden` from truncation clips it.
 
-The scroll shadow is a `::after` on the last pinned cell, faded in by a `data-scrolled-x` attribute that a passive, rAF-throttled listener writes directly to the DOM. **No React state is involved, so scrolling never triggers a render.**
-
-The shadow is drawn *inside* the pinned cell's right edge. Positioned outside, it is clipped by the `overflow: hidden` that truncation requires — which showed up as a shadow that appeared on the header and nowhere else.
-
-## Responsive
-
-- **≥1024px** — full table.
-- **640–1023px** — horizontal scroll, pinned column held. At 820px the pinned column measures 250px, 30% of the viewport, under the ~40% ceiling where clamping to `minSize` would be needed.
-- **<640px** — opt in with `responsive="cards"`. Each row becomes a card: `meta.priority: 1` forms the header, `2` becomes labelled rows, `3` is dropped. Expansion still works inline.
-
-Both layouts are mounted and CSS chooses, so there is no server/client swap on mobile. They therefore cannot share element ids — card panels carry a `-card` suffix so `aria-controls` stays unambiguous.
+Responsive: full table ≥1024px; scroll with the pinned column held 640–1023px; `responsive="cards"` below 640px, where `meta.priority` 1 forms the card header, 2 becomes labelled rows, 3 is dropped.
 
 ## State management
 
-Table state is ephemeral view state scoped to one component. A global store would re-render subscribers that do not care on every sort click, and would make the table unusable twice on one page. `useReducer` plus a controlled-prop escape hatch gives local-by-default, liftable when a page needs it, and zero dependencies.
+`useReducer` inside the hook, liftable via controlled props. No Redux, Zustand or Jotai.
 
-`useDataTable` holds **no refs**. A `useState`-created cache carries the memo closures and a stable table object whose methods delegate to the current render's instance. Writing `ref.current` during render is unsafe — React can discard a render — and the first implementation that did so was also serving stale `data` from a row model that had captured the first render's table.
+Table state is ephemeral view state scoped to one component. A global store re-renders subscribers that do not care on every sort click, and makes the table unusable twice on one page. Local by default, liftable when a page needs it (URL sync), zero dependencies, testable reducers.
 
-## Accessibility
+`useDataTable` holds **no refs**. A `useState` cache carries memo closures and a stable table object delegating to the current render's instance. Writing `ref.current` during render is unsafe — React may discard a render — and the version that did also served stale `data` from a row model that had captured the first render's table.
 
-- Real `<table>`/`<thead>`/`<tbody>`/`<th scope="col">`, with a visually hidden `<caption>`.
-- **No `role="grid"`.** Full 2D arrow-key navigation is not implemented, and a grid role without grid semantics is worse than no role.
-- Sortable headers are buttons filling the `<th>`; `aria-sort` tracks direction and the button label states the **next** action ("Sort by Instructor, ascending"). Focus stays on the button across the re-render.
-- Two polite live regions: fetch status, and sort changes ("Sorted by Class, ascending").
-- Expand toggles carry `aria-expanded` and `aria-controls` with domain labels ("Show attendees for Vinyasa Flow, Mon 17 Aug").
-- Pagination sits in `<nav aria-label="Pagination">` with the range in a live region.
-- Focus rings are never removed; disabled controls get `not-allowed` rather than a pointer that promises nothing.
+## Tradeoffs and assumptions
 
-Sorting and pagination were both driven keyboard-only during development.
-
-## Performance
-
-Measured in a **production build** (`pnpm build && pnpm start`), Chrome on an Apple Silicon Mac, 10,000 seeded rows across 12 columns.
-
-| Scenario | Result |
+| Decision | Tradeoff |
 | --- | --- |
-| Sort click → painted, text column | **24ms** first, **21ms** repeat |
-| Sort click → painted, numeric column | **15ms** |
-| Scroll, paginated (10 rows in DOM) | **120fps**, 0 frames over 16.7ms, p95 9ms |
-| Mount 10,000 rows unpaginated | **1507ms** (120,000 cells) |
-| Scroll, 10,000 rows unpaginated | **6fps**, avg frame 164ms, every frame over budget |
+| No virtualisation | 10k rows sort in **~20ms**, but unpaginated they scroll at **6fps** (120k cells, ~164ms/frame). Large datasets must paginate. `getRowModel().rows` is flat so windowing can drop in later. |
+| No test suite | Row models and reducers verified by compiling the core to CJS and driving it under `node` (50 assertions); behaviour verified in a browser. No automated regression net. |
+| No `role="grid"` | 2D arrow-key navigation is not implemented, and a grid role without grid semantics is worse than none. |
+| Tailwind, not CSS Modules | Every raw value lives in `tokens.css` and reaches components as a semantic utility, so no component holds a hex — but consumers of the styled layer adopt this theme. The core has no styling opinion. |
+| Left-pinning only | `pin` is typed `"left" \| false`. Right-pinning needs offsets measured from the right edge. |
+| Two pages | Server mode is demonstrated in the playground rather than a dedicated bookings page. |
+| Single theme | Tokens are structured for a second palette; none ships. |
+| Seeded mock data | No network layer, cache or persistence, apart from injected latency on on-demand children. |
 
-Sorting comfortably beats the 100ms target, because it happens on a precomputed value array and an index sort rather than repeated accessor calls.
+Accessibility assumptions: real `<table>` semantics with a visually hidden `<caption>`; sort buttons label the **next** action and keep focus across re-render; polite live regions for sort changes, fetch status and page range; expand toggles wired with `aria-expanded` / `aria-controls`. Built to spec and checked by hand — not verified with axe.
 
-**The unpaginated 10,000-row case does not scroll at 60fps, and cannot without virtualisation.** Putting 120,000 cells in the DOM costs ~164ms per frame in style and layout — no amount of memoisation fixes that, because the work is the browser's, not React's. `getRowModel().rows` is a flat array specifically so a windowing layer could be dropped into `DataTableBody` later. Until then, large datasets must be paginated, which is the realistic usage and is smooth.
-
-## Non-goals
-
-Deliberately not built: column resizing, reordering or visibility toggling; grouping and aggregation; row selection (nothing here acts on a selection, so checkboxes would be decoration); filtering as a table feature (the boundary is honest — filters belong outside and feed the request); virtualisation; a real backend or auth.
-
+Non-goals: column resizing, reordering, visibility toggling, grouping, aggregation, row selection, filtering as a table feature, virtualisation, a real backend.
