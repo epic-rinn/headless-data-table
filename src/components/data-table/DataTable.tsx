@@ -60,6 +60,8 @@ export function DataTable<TData, TSubData = never>({
   const cards = responsive === "cards";
   const showRows = !loading && status !== "error" && rows.length > 0;
 
+  const totalWidth = columns.reduce((sum, column) => sum + column.getSize(), 0);
+
   const canExpandRow = (row: Row<TData>) =>
     Boolean(renderExpanded) && table.getCanExpand(row);
   const toggleLabel = (row: Row<TData>, expanded: boolean) =>
@@ -84,8 +86,8 @@ export function DataTable<TData, TSubData = never>({
         )}
       >
         <table
-          className="w-full table-fixed border-collapse text-sm"
-          style={{ minWidth: "max-content" }}
+          className="w-full table-fixed border-separate border-spacing-0 text-sm"
+          style={{ minWidth: `${totalWidth}px` }}
         >
           <caption className="sr-only">{caption}</caption>
 
