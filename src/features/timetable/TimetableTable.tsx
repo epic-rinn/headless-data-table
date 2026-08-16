@@ -94,6 +94,7 @@ export function TimetableTable() {
           table={table}
           caption={`Classes scheduled for ${label}`}
           stickyHeader
+          responsive="cards"
           empty={{
             title: `No classes scheduled for ${label}.`,
             description: "The studio is closed on Sundays.",

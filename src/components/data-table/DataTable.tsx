@@ -2,7 +2,9 @@
 
 import clsx from "clsx";
 import { Fragment, type ReactNode, useState } from "react";
+import { Button } from "@/components/ui/Button";
 import type { AsyncSubRowsState, Row, Table } from "@/table-core";
+import { DataTableCards } from "./DataTableCards";
 import { DataTableHead } from "./DataTableHead";
 import { DataTableRow } from "./DataTableRow";
 import { ExpandedRow } from "./ExpandedRow";
@@ -24,6 +26,8 @@ export type DataTableProps<TData, TSubData = never> = {
   empty?: { title: string; description?: string; action?: ReactNode };
   skeletonRows?: number;
   stickyHeader?: boolean;
+  /** "cards" swaps to a stacked card layout below 640px. */
+  responsive?: "scroll" | "cards";
   className?: string;
   renderExpanded?: (
     row: Row<TData>,
@@ -42,6 +46,7 @@ export function DataTable<TData, TSubData = never>({
   empty,
   skeletonRows = 8,
   stickyHeader = false,
+  responsive = "scroll",
   className,
   renderExpanded,
   expandLabel,
@@ -52,6 +57,13 @@ export function DataTable<TData, TSubData = never>({
   const columns = table.getAllColumns();
   const rows = table.getRowModel().rows;
   const loading = status === "loading";
+  const cards = responsive === "cards";
+  const showRows = !loading && status !== "error" && rows.length > 0;
+
+  const canExpandRow = (row: Row<TData>) =>
+    Boolean(renderExpanded) && table.getCanExpand(row);
+  const toggleLabel = (row: Row<TData>, expanded: boolean) =>
+    expandLabel?.(row) ?? (expanded ? "Hide details" : "Show details");
 
   const statusMessage = loading
     ? "Loading results"
@@ -66,7 +78,10 @@ export function DataTable<TData, TSubData = never>({
       <div
         ref={scrollRef}
         aria-busy={loading || undefined}
-        className="relative overflow-x-auto rounded-lg border border-border-subtle bg-surface"
+        className={clsx(
+          "relative overflow-x-auto rounded-lg border border-border-subtle bg-surface",
+          cards && "hidden sm:block",
+        )}
       >
         <table
           className="w-full table-fixed border-collapse text-sm"
@@ -145,6 +160,69 @@ export function DataTable<TData, TSubData = never>({
           )}
         </table>
       </div>
+
+      {cards && !showRows ? (
+        <div className="rounded-lg border border-border-subtle bg-surface p-6 sm:hidden">
+          {loading ? (
+            <div className="flex flex-col gap-3" aria-hidden>
+              {Array.from({ length: 3 }, (_, i) => (
+                <span
+                  key={`card-skeleton-${i}`}
+                  className="h-12 animate-pulse rounded-md bg-surface-inset motion-reduce:animate-none"
+                />
+              ))}
+            </div>
+          ) : status === "error" ? (
+            <div className="flex flex-col items-center gap-2 text-center">
+              <p className="text-base font-medium">
+                {error?.title ?? "Couldn't load this table."}
+              </p>
+              {error?.description ? (
+                <p className="text-sm text-text-muted">{error.description}</p>
+              ) : null}
+              {onRetry ? (
+                <Button size="sm" variant="secondary" onClick={onRetry}>
+                  Try again
+                </Button>
+              ) : null}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-2 text-center">
+              <p className="text-base font-medium">
+                {empty?.title ?? "Nothing to show."}
+              </p>
+              {empty?.description ? (
+                <p className="text-sm text-text-muted">{empty.description}</p>
+              ) : null}
+              {empty?.action ?? null}
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {cards && showRows ? (
+        <DataTableCards
+          className="sm:hidden"
+          rows={rows}
+          isExpanded={(row) => canExpandRow(row) && table.getIsExpanded(row.id)}
+          expandedId={(row) => `${expandedRowId(row.id)}-card`}
+          renderExpander={(row) =>
+            canExpandRow(row) ? (
+              <ExpandToggle
+                expanded={table.getIsExpanded(row.id)}
+                controls={`${expandedRowId(row.id)}-card`}
+                label={toggleLabel(row, table.getIsExpanded(row.id))}
+                onToggle={() => table.toggleExpanded(row.id)}
+              />
+            ) : null
+          }
+          renderExpanded={
+            renderExpanded
+              ? (row) => renderExpanded(row, table.getSubRowsState(row.id))
+              : undefined
+          }
+        />
+      ) : null}
 
       <div aria-live="polite" className="sr-only">
         {statusMessage}

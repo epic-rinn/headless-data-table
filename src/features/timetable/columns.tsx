@@ -37,6 +37,7 @@ export function createTimetableColumns(now: number | null) {
       enableSorting: true,
       size: 250,
       pin: "left",
+      meta: { priority: 1 },
       cell: (info) => {
         const cancelled = info.row.original.status === "cancelled";
         return (
@@ -60,6 +61,7 @@ export function createTimetableColumns(now: number | null) {
       header: "Instructor",
       enableSorting: true,
       size: 180,
+      meta: { priority: 2 },
       cell: (info) => (
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="truncate">{info.getValue()}</span>
@@ -75,7 +77,7 @@ export function createTimetableColumns(now: number | null) {
       header: "Time",
       enableSorting: true,
       size: 130,
-      meta: { numeric: true },
+      meta: { numeric: true, priority: 1 },
       cell: (info) => (
         <span className="flex flex-col items-end leading-tight">
           <span data-numeric>{timeFormat.format(info.getValue())}</span>
@@ -89,7 +91,7 @@ export function createTimetableColumns(now: number | null) {
       header: "Attendance",
       enableSorting: true,
       size: 140,
-      meta: { numeric: true },
+      meta: { numeric: true, priority: 2 },
       cell: (info) => {
         const { capacity, waitlisted } = info.row.original;
         const booked = info.getValue();
@@ -125,6 +127,7 @@ export function createTimetableColumns(now: number | null) {
       header: "Status",
       enableSorting: true,
       size: 130,
+      meta: { priority: 2 },
       sortingFn: (a, b) =>
         STATUS_ORDER[a.original.status] - STATUS_ORDER[b.original.status],
       cell: (info) => {
