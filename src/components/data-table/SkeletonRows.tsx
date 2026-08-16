@@ -8,7 +8,7 @@ export function SkeletonRows<TData>({
   table,
   rows,
 }: {
-  table: Table<TData>;
+  table: Table<TData, unknown>;
   rows: number;
 }) {
   const columns = table.getAllColumns();

@@ -5,6 +5,7 @@ export { getPaginationRowModel } from "./row-models/getPaginationRowModel";
 export { getSortedRowModel } from "./row-models/getSortedRowModel";
 export type {
   AccessorKey,
+  AsyncSubRowsState,
   Cell,
   Column,
   ColumnDef,

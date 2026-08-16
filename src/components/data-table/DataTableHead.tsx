@@ -9,7 +9,7 @@ export function DataTableHead<TData>({
   sticky,
   onAnnounce,
 }: {
-  table: Table<TData>;
+  table: Table<TData, unknown>;
   sticky: boolean;
   onAnnounce: (message: string) => void;
 }) {

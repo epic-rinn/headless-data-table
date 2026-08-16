@@ -103,3 +103,64 @@ export function createSessions(count: number, seed = 20260816): Session[] {
 
   return sessions;
 }
+
+export type Attendee = {
+  id: string;
+  customerName: string;
+  paymentType: "one_time" | "package" | "membership";
+  bookingStatus: "booked" | "checked_in" | "cancelled" | "no_show";
+  packageRemaining?: number;
+  isFirstVisit: boolean;
+};
+
+const FIRST = [
+  "Aoife",
+  "Marcus",
+  "Priya",
+  "Tomas",
+  "Nia",
+  "Oskar",
+  "Leila",
+  "Rhys",
+];
+const LAST = [
+  "Byrne",
+  "Adeyemi",
+  "Nowak",
+  "Silva",
+  "Khan",
+  "Fischer",
+  "Moreau",
+];
+const PAYMENTS: Attendee["paymentType"][] = [
+  "one_time",
+  "package",
+  "membership",
+];
+const BOOKING: Attendee["bookingStatus"][] = [
+  "booked",
+  "checked_in",
+  "cancelled",
+  "no_show",
+];
+
+export function createAttendees(session: Session): Attendee[] {
+  const seed = session.id
+    .split("")
+    .reduce((acc, ch) => acc + ch.charCodeAt(0), 7);
+  const random = lcg(seed * 9301);
+  const count = Math.min(session.booked, session.capacity);
+
+  return Array.from({ length: count }, (_, index) => {
+    const paymentType = pick(random, PAYMENTS, "one_time");
+    return {
+      id: `${session.id}-a${index}`,
+      customerName: `${pick(random, FIRST, "Aoife")} ${pick(random, LAST, "Byrne")}`,
+      paymentType,
+      bookingStatus: pick(random, BOOKING, "booked"),
+      packageRemaining:
+        paymentType === "package" ? 1 + Math.floor(random() * 9) : undefined,
+      isFirstVisit: random() < 0.18,
+    };
+  });
+}

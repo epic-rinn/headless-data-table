@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { memo } from "react";
+import { memo, type ReactNode } from "react";
 import type { Cell, Row } from "@/table-core";
 
 function cellAlignment<TData>(cell: Cell<TData>): string {
@@ -12,7 +12,13 @@ function cellAlignment<TData>(cell: Cell<TData>): string {
   return "text-left";
 }
 
-function DataTableCell<TData>({ cell }: { cell: Cell<TData> }) {
+function DataTableCell<TData>({
+  cell,
+  leading,
+}: {
+  cell: Cell<TData>;
+  leading?: ReactNode;
+}) {
   const numeric = cell.column.columnDef.meta?.numeric === true;
   const value = cell.getValue();
   const pinned = cell.column.getIsPinned();
@@ -33,16 +39,33 @@ function DataTableCell<TData>({ cell }: { cell: Cell<TData> }) {
       }}
       title={typeof value === "string" ? value : undefined}
     >
-      {cell.render()}
+      {leading ? (
+        <div className="flex min-w-0 items-center gap-1.5">
+          {leading}
+          <div className="min-w-0 flex-1 truncate">{cell.render()}</div>
+        </div>
+      ) : (
+        cell.render()
+      )}
     </td>
   );
 }
 
-function DataTableRowImpl<TData>({ row }: { row: Row<TData> }) {
+function DataTableRowImpl<TData>({
+  row,
+  expander,
+}: {
+  row: Row<TData>;
+  expander?: ReactNode;
+}) {
   return (
     <tr className="group transition-colors hover:bg-row-hover">
-      {row.getCells().map((cell) => (
-        <DataTableCell key={cell.id} cell={cell} />
+      {row.getCells().map((cell, index) => (
+        <DataTableCell
+          key={cell.id}
+          cell={cell}
+          leading={index === 0 ? expander : undefined}
+        />
       ))}
     </tr>
   );

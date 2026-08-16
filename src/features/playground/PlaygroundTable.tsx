@@ -10,8 +10,14 @@ import {
   getSortedRowModel,
   useDataTable,
 } from "@/table-core";
+import { AsyncAttendeePanel, AttendeeTable } from "./AttendeePanel";
 import { sessionColumns } from "./columns";
-import { createSessions } from "./data";
+import {
+  type Attendee,
+  createAttendees,
+  createSessions,
+  type Session,
+} from "./data";
 
 const coreRowModel =
   getCoreRowModel<ReturnType<typeof createSessions>[number]>();
@@ -22,14 +28,37 @@ const paginationRowModel =
 
 const STATUSES: DataTableStatus[] = ["success", "loading", "error"];
 const ROW_COUNTS = [0, 40, 1000];
+type ExpandMode = "none" | "inline" | "on-demand";
+const EXPAND_MODES: ExpandMode[] = ["none", "inline", "on-demand"];
 
 export function PlaygroundTable() {
   const [status, setStatus] = useState<DataTableStatus>("success");
   const [rowCount, setRowCount] = useState(40);
   const [paginated, setPaginated] = useState(true);
   const [sortable, setSortable] = useState(true);
+  const [expandMode, setExpandMode] = useState<ExpandMode>("inline");
+  const [failChild, setFailChild] = useState(false);
 
   const data = useMemo(() => createSessions(rowCount), [rowCount]);
+
+  const loadSubRows = useMemo(() => {
+    if (expandMode !== "on-demand") return undefined;
+    return (row: { original: Session }, signal: AbortSignal) =>
+      new Promise<Attendee[]>((resolve, reject) => {
+        const delay = 400 + Math.random() * 700;
+        const timer = setTimeout(() => {
+          if (failChild) {
+            reject(new Error("The connection timed out."));
+          } else {
+            resolve(createAttendees(row.original));
+          }
+        }, delay);
+        signal.addEventListener("abort", () => {
+          clearTimeout(timer);
+          reject(new Error("aborted"));
+        });
+      });
+  }, [expandMode, failChild]);
 
   const table = useDataTable({
     data,
@@ -39,6 +68,12 @@ export function PlaygroundTable() {
     getCoreRowModel: coreRowModel,
     ...(sortable ? { getSortedRowModel: sortedRowModel } : {}),
     ...(paginated ? { getPaginationRowModel: paginationRowModel } : {}),
+    ...(expandMode === "none"
+      ? {}
+      : {
+          getRowCanExpand: () => true,
+          ...(loadSubRows ? { loadSubRows } : {}),
+        }),
   });
 
   return (
@@ -80,6 +115,26 @@ export function PlaygroundTable() {
         >
           pagination {paginated ? "on" : "off"}
         </Button>
+        <span className="mx-1 h-5 w-px bg-border-subtle" />
+        {EXPAND_MODES.map((mode) => (
+          <Button
+            key={mode}
+            size="sm"
+            variant={expandMode === mode ? "primary" : "secondary"}
+            onClick={() => setExpandMode(mode)}
+          >
+            children: {mode}
+          </Button>
+        ))}
+        {expandMode === "on-demand" ? (
+          <Button
+            size="sm"
+            variant={failChild ? "danger" : "secondary"}
+            onClick={() => setFailChild((v) => !v)}
+          >
+            child fetch {failChild ? "fails" : "ok"}
+          </Button>
+        ) : null}
       </div>
 
       <div>
@@ -93,6 +148,16 @@ export function PlaygroundTable() {
             description: "The connection timed out.",
           }}
           onRetry={() => setStatus("success")}
+          expandLabel={(row) => `Show attendees for ${row.original.name}`}
+          renderExpanded={
+            expandMode === "none"
+              ? undefined
+              : expandMode === "inline"
+                ? (row) => (
+                    <AttendeeTable attendees={createAttendees(row.original)} />
+                  )
+                : (_row, sub) => <AsyncAttendeePanel state={sub} />
+          }
           empty={{
             title: "No classes scheduled.",
             description: "Nothing is on the timetable for this day.",

@@ -1,4 +1,14 @@
-import { useReducer, useState } from "react";
+import { useCallback, useEffect, useReducer, useState } from "react";
+import {
+  abortRow,
+  clearStore,
+  createSubRowsStore,
+  expandedIds,
+  IDLE,
+  type SubRowsStore,
+  syncDataSource,
+  toggleExpandedState,
+} from "./features/expansion";
 import {
   clampPageIndex,
   getDisplayRange,
@@ -19,11 +29,13 @@ import {
   tableStateReducer,
 } from "./state";
 import type {
+  AsyncSubRowsState,
   Column,
   ExpandedState,
   Header,
   OnChangeFn,
   PaginationState,
+  Row,
   RowModel,
   SortDirection,
   SortingState,
@@ -35,9 +47,13 @@ import { memo } from "./utils/memo";
 
 const DEFAULT_COLUMN_SIZE = 160;
 
-type TableCache<TData> = {
-  live: Table<TData> | null;
-  stable: Table<TData> | null;
+type TableCache<TData, TSubData> = {
+  live: Table<TData, TSubData> | null;
+  stable: Table<TData, TSubData> | null;
+  subRows: SubRowsStore<TSubData>;
+  loadSubRows:
+    | ((row: Row<TData>, signal: AbortSignal) => Promise<TSubData>)
+    | undefined;
   getAllColumns: (() => Column<TData>[]) | null;
   getSortedRowModel: (() => RowModel<TData>) | null;
   getPaginationRowModel: (() => RowModel<TData>) | null;
@@ -45,10 +61,12 @@ type TableCache<TData> = {
   getCoreRowModel: (() => RowModel<TData>) | null;
 };
 
-function createCache<TData>(): TableCache<TData> {
+function createCache<TData, TSubData>(): TableCache<TData, TSubData> {
   return {
     live: null,
     stable: null,
+    subRows: createSubRowsStore<TSubData>(),
+    loadSubRows: undefined,
     getAllColumns: null,
     getSortedRowModel: null,
     getPaginationRowModel: null,
@@ -57,7 +75,9 @@ function createCache<TData>(): TableCache<TData> {
   };
 }
 
-function requireLive<TData>(cache: TableCache<TData>): Table<TData> {
+function requireLive<TData, TSubData>(
+  cache: TableCache<TData, TSubData>,
+): Table<TData, TSubData> {
   const live = cache.live;
   if (!live) {
     throw new Error("Table was accessed before its first render completed.");
@@ -65,7 +85,9 @@ function requireLive<TData>(cache: TableCache<TData>): Table<TData> {
   return live;
 }
 
-function createStableTable<TData>(cache: TableCache<TData>): Table<TData> {
+function createStableTable<TData, TSubData>(
+  cache: TableCache<TData, TSubData>,
+): Table<TData, TSubData> {
   return {
     get options() {
       return requireLive(cache).options;
@@ -99,10 +121,18 @@ function createStableTable<TData>(cache: TableCache<TData>): Table<TData> {
     previousPage: () => requireLive(cache).previousPage(),
     firstPage: () => requireLive(cache).firstPage(),
     lastPage: () => requireLive(cache).lastPage(),
+
+    getCanExpand: (row) => requireLive(cache).getCanExpand(row),
+    getIsExpanded: (rowId) => requireLive(cache).getIsExpanded(rowId),
+    toggleExpanded: (rowId) => requireLive(cache).toggleExpanded(rowId),
+    getSubRowsState: (rowId) => requireLive(cache).getSubRowsState(rowId),
   };
 }
 
-function buildColumns<TData>(cache: TableCache<TData>, stable: Table<TData>) {
+function buildColumns<TData, TSubData>(
+  cache: TableCache<TData, TSubData>,
+  stable: Table<TData, TSubData>,
+) {
   return memo(
     () => [requireLive(cache).options.columns] as const,
     (columnDefs): Column<TData>[] => {
@@ -175,7 +205,10 @@ function buildColumns<TData>(cache: TableCache<TData>, stable: Table<TData>) {
   );
 }
 
-function buildHeaders<TData>(cache: TableCache<TData>, stable: Table<TData>) {
+function buildHeaders<TData, TSubData>(
+  cache: TableCache<TData, TSubData>,
+  stable: Table<TData, TSubData>,
+) {
   return memo(
     () => [requireLive(cache).getAllColumns()] as const,
     (columns): Header<TData>[] =>
@@ -196,16 +229,20 @@ function buildHeaders<TData>(cache: TableCache<TData>, stable: Table<TData>) {
   );
 }
 
-export function useDataTable<TData>(
-  options: UseDataTableOptions<TData>,
-): Table<TData> {
+export function useDataTable<TData, TSubData = never>(
+  options: UseDataTableOptions<TData, TSubData>,
+): Table<TData, TSubData> {
   const [internalState, dispatch] = useReducer(
     tableStateReducer,
     options.initialState,
     createInitialState,
   );
 
-  const [cache] = useState<TableCache<TData>>(createCache<TData>);
+  const [cache] = useState<TableCache<TData, TSubData>>(
+    createCache<TData, TSubData>,
+  );
+  const [, bump] = useState(0);
+  const rerender = useCallback(() => bump((n) => n + 1), []);
 
   const state = resolveState(internalState, options.state);
 
@@ -239,7 +276,7 @@ export function useDataTable<TData>(
   const getHeaders = cache.getHeaders ?? buildHeaders(cache, stable);
   cache.getHeaders = getHeaders;
 
-  const live: Table<TData> = {
+  const live: Table<TData, TSubData> = {
     options,
     getState: () => state,
 
@@ -322,9 +359,86 @@ export function useDataTable<TData>(
     previousPage: () => live.setPageIndex(live.getPageIndex() - 1),
     firstPage: () => live.setPageIndex(0),
     lastPage: () => live.setPageIndex(live.getPageCount() - 1),
+
+    getCanExpand: (row) => options.getRowCanExpand?.(row) ?? false,
+    getIsExpanded: (rowId) => state.expanded[rowId] === true,
+    toggleExpanded: (rowId) => {
+      setExpanded((old) => toggleExpandedState(old, rowId));
+    },
+    getSubRowsState: (rowId) =>
+      cache.subRows.states.get(rowId) ?? (IDLE as AsyncSubRowsState<TSubData>),
   };
 
   cache.live = live;
+  cache.loadSubRows = options.loadSubRows;
+
+  const loadSubRows = options.loadSubRows;
+  const expandedKey = expandedIds(state.expanded).sort().join("\u0000");
+
+  useEffect(() => {
+    if (!loadSubRows) return;
+
+    const store = cache.subRows;
+    syncDataSource(store, options.data);
+
+    const open = new Set(expandedIds(stable.getState().expanded));
+
+    for (const rowId of store.controllers.keys()) {
+      if (!open.has(rowId)) abortRow(store, rowId);
+    }
+
+    for (const rowId of open) {
+      const existing = store.states.get(rowId);
+      if (existing && existing.status !== "idle") continue;
+
+      const row = stable.getRow(rowId);
+      if (!row) continue;
+
+      start(store, row, rowId);
+    }
+
+    function start(
+      store: SubRowsStore<TSubData>,
+      row: Row<TData>,
+      rowId: string,
+    ) {
+      const controller = new AbortController();
+      store.controllers.set(rowId, controller);
+      store.states.set(rowId, { status: "loading" });
+      rerender();
+
+      cache.loadSubRows?.(row, controller.signal).then(
+        (data) => {
+          if (controller.signal.aborted) return;
+          store.controllers.delete(rowId);
+          store.states.set(rowId, {
+            status: "success",
+            data,
+            fetchedAt: Date.now(),
+          });
+          rerender();
+        },
+        (error: unknown) => {
+          if (controller.signal.aborted) return;
+          store.controllers.delete(rowId);
+          store.states.set(rowId, {
+            status: "error",
+            error: error instanceof Error ? error : new Error(String(error)),
+            retry: () => {
+              store.states.delete(rowId);
+              start(store, row, rowId);
+            },
+          });
+          rerender();
+        },
+      );
+    }
+  }, [expandedKey, loadSubRows, options.data, cache, stable, rerender]);
+
+  useEffect(() => {
+    const store = cache.subRows;
+    return () => clearStore(store);
+  }, [cache]);
 
   return stable;
 }

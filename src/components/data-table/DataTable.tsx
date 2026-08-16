@@ -1,18 +1,22 @@
 "use client";
 
 import clsx from "clsx";
-import { type ReactNode, useState } from "react";
-import type { Table } from "@/table-core";
+import { Fragment, type ReactNode, useState } from "react";
+import type { AsyncSubRowsState, Row, Table } from "@/table-core";
 import { DataTableHead } from "./DataTableHead";
 import { DataTableRow } from "./DataTableRow";
+import { ExpandedRow } from "./ExpandedRow";
+import { ExpandToggle } from "./ExpandToggle";
 import { SkeletonRows } from "./SkeletonRows";
 import { EmptyState, ErrorState } from "./TableStates";
 import { useScrollShadow } from "./useScrollShadow";
 
 export type DataTableStatus = "idle" | "loading" | "success" | "error";
 
-export type DataTableProps<TData> = {
-  table: Table<TData>;
+export const expandedRowId = (rowId: string) => `row-${rowId}-detail`;
+
+export type DataTableProps<TData, TSubData = never> = {
+  table: Table<TData, TSubData>;
   caption: string;
   status?: DataTableStatus;
   error?: { title: string; description?: string };
@@ -21,9 +25,15 @@ export type DataTableProps<TData> = {
   skeletonRows?: number;
   stickyHeader?: boolean;
   className?: string;
+  renderExpanded?: (
+    row: Row<TData>,
+    sub: AsyncSubRowsState<TSubData>,
+  ) => ReactNode;
+  /** Accessible name for a row's expand button, e.g. "Show attendees for X". */
+  expandLabel?: (row: Row<TData>) => string;
 };
 
-export function DataTable<TData>({
+export function DataTable<TData, TSubData = never>({
   table,
   caption,
   status = "success",
@@ -33,7 +43,9 @@ export function DataTable<TData>({
   skeletonRows = 8,
   stickyHeader = false,
   className,
-}: DataTableProps<TData>) {
+  renderExpanded,
+  expandLabel,
+}: DataTableProps<TData, TSubData>) {
   const [announcement, setAnnouncement] = useState("");
   const scrollRef = useScrollShadow();
 
@@ -92,9 +104,43 @@ export function DataTable<TData>({
             />
           ) : (
             <tbody>
-              {rows.map((row) => (
-                <DataTableRow key={row.id} row={row} />
-              ))}
+              {rows.map((row) => {
+                const canExpand =
+                  Boolean(renderExpanded) && table.getCanExpand(row);
+                const expanded = canExpand && table.getIsExpanded(row.id);
+
+                return (
+                  <Fragment key={row.id}>
+                    <DataTableRow
+                      row={row}
+                      expander={
+                        canExpand ? (
+                          <ExpandToggle
+                            expanded={expanded}
+                            controls={expandedRowId(row.id)}
+                            label={
+                              expandLabel?.(row) ??
+                              (expanded ? "Hide details" : "Show details")
+                            }
+                            onToggle={() => table.toggleExpanded(row.id)}
+                          />
+                        ) : undefined
+                      }
+                    />
+                    {canExpand ? (
+                      <ExpandedRow
+                        id={expandedRowId(row.id)}
+                        colSpan={columns.length}
+                        open={expanded}
+                      >
+                        {expanded
+                          ? renderExpanded?.(row, table.getSubRowsState(row.id))
+                          : null}
+                      </ExpandedRow>
+                    ) : null}
+                  </Fragment>
+                );
+              })}
             </tbody>
           )}
         </table>

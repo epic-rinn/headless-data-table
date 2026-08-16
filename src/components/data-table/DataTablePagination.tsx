@@ -16,7 +16,7 @@ export function DataTablePagination<TData>({
   pageSizeOptions = PAGE_SIZE_OPTIONS,
   itemNoun = "results",
 }: {
-  table: Table<TData>;
+  table: Table<TData, unknown>;
   pageSizeOptions?: readonly number[];
   itemNoun?: string;
 }) {

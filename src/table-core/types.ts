@@ -9,6 +9,12 @@ export type PaginationState = { pageIndex: number; pageSize: number };
 
 export type ExpandedState = Record<string, boolean>;
 
+export type AsyncSubRowsState<TSubData> =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "success"; data: TSubData; fetchedAt: number }
+  | { status: "error"; error: Error; retry: () => void };
+
 export type TableState = {
   sorting: SortingState;
   pagination: PaginationState;
@@ -126,24 +132,24 @@ export type RowModel<TData> = {
   rowsById: Record<string, Row<TData>>;
 };
 
-export type RowModelFactory<TData> = (
-  table: Table<TData>,
+export type RowModelFactory<TData, TSubData = never> = (
+  table: Table<TData, TSubData>,
 ) => () => RowModel<TData>;
 
 export type HeaderContext<TData> = {
-  table: Table<TData>;
+  table: Table<TData, unknown>;
   column: Column<TData>;
   header: Header<TData>;
 };
 
 export type CellContext<TData, TValue> = {
-  table: Table<TData>;
+  table: Table<TData, unknown>;
   row: Row<TData>;
   column: Column<TData>;
   getValue: () => TValue;
 };
 
-export type UseDataTableOptions<TData> = {
+export type UseDataTableOptions<TData, TSubData = never> = {
   data: TData[];
   columns: ColumnDef<TData>[];
 
@@ -156,9 +162,9 @@ export type UseDataTableOptions<TData> = {
   onPaginationChange?: OnChangeFn<PaginationState>;
   onExpandedChange?: OnChangeFn<ExpandedState>;
 
-  getCoreRowModel: RowModelFactory<TData>;
-  getSortedRowModel?: RowModelFactory<TData>;
-  getPaginationRowModel?: RowModelFactory<TData>;
+  getCoreRowModel: RowModelFactory<TData, TSubData>;
+  getSortedRowModel?: RowModelFactory<TData, TSubData>;
+  getPaginationRowModel?: RowModelFactory<TData, TSubData>;
 
   manualSorting?: boolean;
   manualPagination?: boolean;
@@ -166,10 +172,14 @@ export type UseDataTableOptions<TData> = {
 
   enableSortingRemoval?: boolean;
   enableMultiSort?: boolean;
+
+  getRowCanExpand?: (row: Row<TData>) => boolean;
+  /** Presence of this switches expansion from inline to on-demand. */
+  loadSubRows?: (row: Row<TData>, signal: AbortSignal) => Promise<TSubData>;
 };
 
-export type Table<TData> = {
-  options: UseDataTableOptions<TData>;
+export type Table<TData, TSubData = never> = {
+  options: UseDataTableOptions<TData, TSubData>;
   getState: () => TableState;
 
   setSorting: OnChangeFn<SortingState>;
@@ -202,4 +212,9 @@ export type Table<TData> = {
   previousPage: () => void;
   firstPage: () => void;
   lastPage: () => void;
+
+  getCanExpand: (row: Row<TData>) => boolean;
+  getIsExpanded: (rowId: string) => boolean;
+  toggleExpanded: (rowId: string) => void;
+  getSubRowsState: (rowId: string) => AsyncSubRowsState<TSubData>;
 };
